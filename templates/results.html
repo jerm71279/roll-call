@@ -123,7 +123,7 @@
         <strong>{{ teacher }}</strong> ({{ c_rows | length }} students)
         <table>
           <thead>
-            <tr><th>Name</th><th>Gender</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
+            <tr><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
             {% if not lock_edits %}<th>Move to</th>{% endif %}
             </tr>
           </thead>
@@ -132,6 +132,7 @@
             <tr>
               <td>{{ row.last_name }}, {{ row.first_name }}</td>
               <td>{{ row.gender }}</td>
+              <td>{{ row.race }}</td>
               <td>
                 {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
                 {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
