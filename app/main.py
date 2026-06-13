@@ -27,7 +27,7 @@ _runs: dict[str, dict] = {}
 
 @app.get("/", response_class=HTMLResponse)
 async def upload_form(request: Request):
-    return templates.TemplateResponse("upload.html", {"request": request})
+    return templates.TemplateResponse(request, "upload.html")
 
 
 @app.post("/upload", response_class=HTMLResponse)
@@ -63,7 +63,7 @@ async def handle_upload(
     try:
         packets = build_grade_packets(teacher_raw, student_raw, weights, grade_list)
     except ValueError as e:
-        return templates.TemplateResponse("upload.html", {"request": request, "error": str(e)})
+        return templates.TemplateResponse(request, "upload.html", {"error": str(e)})
 
     # Divide solver budget evenly across grades so all-grades runs stay inside
     # Render's 30s HTTP timeout (SOLVER_TIMEOUT_SECONDS defaults to 25 in prod).
@@ -85,8 +85,7 @@ async def handle_upload(
     run_id = str(uuid.uuid4())
     _runs[run_id] = {"report": report, "teacher_names": teacher_names}
 
-    return templates.TemplateResponse("results.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "results.html", {
         "run_id": run_id,
         "report": report,
         "lock_edits": _LOCK_EDITS,
@@ -98,8 +97,7 @@ async def view_results(request: Request, run_id: str, view: str = "summary"):
     run = _runs.get(run_id)
     if not run:
         raise HTTPException(404, "Run not found — results are not persisted across server restarts")
-    return templates.TemplateResponse("results.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "results.html", {
         "run_id": run_id,
         "report": run["report"],
         "view": view,
