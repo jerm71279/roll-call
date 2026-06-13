@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: roll-call
+    env: python
+    buildCommand: pip install -e .
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: SOLVER_TIMEOUT_SECONDS
+        value: "25"
+      - key: LOCK_MANUAL_EDITS
+        value: "false"

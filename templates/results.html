@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roll-Call — Results</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+          crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"
+          integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"
+          crossorigin="anonymous" defer></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 32px auto; padding: 0 24px; color: #111; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; flex-wrap: wrap; }
+    .btn { padding: 8px 18px; border-radius: 5px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; font-size: 0.9rem; }
+    .btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+    .btn-export { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .btn-export:hover { background: #15803d; }
+    .grade-block { margin-bottom: 36px; }
+    .grade-label { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+    .solver-info { font-size: 0.75rem; color: #888; margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { background: #f3f4f6; text-align: left; padding: 7px 10px; border-bottom: 2px solid #e5e7eb; }
+    td { padding: 6px 10px; border-bottom: 1px solid #e5e7eb; }
+    tr:hover td { background: #f9fafb; }
+    .badge { display: inline-block; padding: 1px 6px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600; }
+    .badge-iep { background: #dbeafe; color: #1e40af; }
+    .badge-gifted { background: #fef9c3; color: #854d0e; }
+    .badge-ell { background: #dcfce7; color: #166534; }
+    .badge-speech { background: #f3e8ff; color: #6b21a8; }
+    .edit-select { font-size: 0.82rem; padding: 2px 4px; border-radius: 4px; border: 1px solid #d1d5db; }
+    .summary-table td:not(:first-child) { text-align: center; }
+    .summary-table th:not(:first-child) { text-align: center; }
+    a.back { color: #1d4ed8; text-decoration: none; font-size: 0.85rem; }
+  </style>
+</head>
+<body x-data="{ view: '{{ view|default('summary') }}' }">
+
+  <h1>Roster Optimizer — Results</h1>
+  <a class="back" href="/">← Upload new roster</a>
+
+  <div class="toolbar" style="margin-top: 16px;">
+    <button class="btn" :class="{ active: view === 'summary' }" @click="view = 'summary'">Summary</button>
+    <button class="btn" :class="{ active: view === 'detail' }" @click="view = 'detail'">By Classroom</button>
+    <button class="btn" :class="{ active: view === 'demographic' }" @click="view = 'demographic'">Demographic Index</button>
+    <a href="/results/{{ run_id }}/export" class="btn btn-export">Export CSV</a>
+  </div>
+
+  {# ── SUMMARY VIEW ─────────────────────────────── #}
+  <div x-show="view === 'summary'">
+    {% for grade_summary in report.summary %}
+    <div class="grade-block">
+      <div class="grade-label">{{ grade_summary.grade_label }}</div>
+      <div class="solver-info">Solver: {{ grade_summary.solver_status }} in {{ grade_summary.solve_time }}s</div>
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>Teacher</th><th>Students</th><th>IEP</th><th>Gifted</th>
+            <th>ELL</th><th>Speech</th><th>Female</th><th>Avg A-B%</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in grade_summary.classrooms %}
+          <tr>
+            <td>{{ c.teacher }}</td>
+            <td>{{ c.total }}</td>
+            <td>{{ c.iep }}</td>
+            <td>{{ c.gifted }}</td>
+            <td>{{ c.ell }}</td>
+            <td>{{ c.speech_only }}</td>
+            <td>{{ c.female }}</td>
+            <td>{{ c.avg_ab }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── DETAIL VIEW (by classroom) ───────────────── #}
+  <div x-show="view === 'detail'">
+    {% set grades = report.rows | map(attribute='grade') | unique | list | sort %}
+    {% for grade in grades %}
+    {% set grade_rows = report.rows | selectattr('grade', 'eq', grade) | list %}
+    {% set classrooms = grade_rows | map(attribute='classroom') | unique | list | sort %}
+    <div class="grade-block">
+      <div class="grade-label">{{ 'Kinder' if grade == 0 else 'Grade ' ~ grade }}</div>
+      {% for c in classrooms %}
+      {% set c_rows = grade_rows | selectattr('classroom', 'eq', c) | list | sort(attribute='last_name') %}
+      {% set teacher = c_rows[0].teacher if c_rows else 'Class ' ~ c %}
+      <div style="margin-bottom: 20px;">
+        <strong>{{ teacher }}</strong> ({{ c_rows | length }} students)
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Gender</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
+            {% if not lock_edits %}<th>Move to</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in c_rows %}
+            <tr>
+              <td>{{ row.last_name }}, {{ row.first_name }}</td>
+              <td>{{ row.gender }}</td>
+              <td>
+                {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
+                {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
+                {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
+                {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
+              </td>
+              <td>{{ row.ab_average }}</td>
+              <td>{{ row.star_reading }}</td>
+              <td>{{ row.iready_math }}</td>
+              {% if not lock_edits %}
+              <td>
+                <select class="edit-select"
+                  hx-post="/results/{{ run_id }}/reassign"
+                  hx-trigger="change"
+                  hx-swap="none"
+                  hx-vals='{"student_id": "{{ row.student_id }}"}'
+                  name="classroom">
+                  {% for opt in classrooms %}
+                  <option value="{{ opt }}" {% if opt == c %}selected{% endif %}>
+                    {{ grade_rows | selectattr('classroom', 'eq', opt) | map(attribute='teacher') | first | default('Class ' ~ opt) }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── DEMOGRAPHIC INDEX VIEW ───────────────────── #}
+  <div x-show="view === 'demographic'" x-data="{ filterFlag: 'all' }">
+    <div class="toolbar" style="margin-bottom: 16px;">
+      <span style="font-size:0.85rem;font-weight:600;">Filter by:</span>
+      <button class="btn" :class="{active: filterFlag==='all'}" @click="filterFlag='all'">All</button>
+      <button class="btn" :class="{active: filterFlag==='iep'}" @click="filterFlag='iep'">IEP</button>
+      <button class="btn" :class="{active: filterFlag==='gifted'}" @click="filterFlag='gifted'">Gifted</button>
+      <button class="btn" :class="{active: filterFlag==='ell'}" @click="filterFlag='ell'">ELL</button>
+      <button class="btn" :class="{active: filterFlag==='speech_only'}" @click="filterFlag='speech_only'">Speech</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Grade</th><th>Classroom</th><th>Teacher</th><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th></tr>
+      </thead>
+      <tbody>
+        {% for row in report.rows | sort(attribute='grade,classroom,last_name') %}
+        <tr
+          x-show="filterFlag === 'all'
+            || (filterFlag === 'iep' && {{ 'true' if row.iep else 'false' }})
+            || (filterFlag === 'gifted' && {{ 'true' if row.gifted else 'false' }})
+            || (filterFlag === 'ell' && {{ 'true' if row.ell else 'false' }})
+            || (filterFlag === 'speech_only' && {{ 'true' if row.speech_only else 'false' }})
+          ">
+          <td>{{ 'K' if row.grade == 0 else row.grade }}</td>
+          <td>{{ row.classroom }}</td>
+          <td>{{ row.teacher }}</td>
+          <td>{{ row.last_name }}, {{ row.first_name }}</td>
+          <td>{{ row.gender }}</td>
+          <td>{{ row.race }}</td>
+          <td>
+            {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
+            {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
+            {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
+            {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</body>
+</html>
