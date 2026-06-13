@@ -14,6 +14,18 @@ from .models import ObjectiveWeights
 from .optimizer import optimize_grade
 from .reporter import build_report, reassign_student, export_csv
 
+def _safe_json(data) -> str:
+    """Serialize to JSON safe for embedding in an HTML <script> tag."""
+    return (
+        json.dumps(data)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
+
+
 _MAX_MB = int(os.environ.get("MAX_UPLOAD_MB", "10"))
 _LOCK_EDITS = os.environ.get("LOCK_MANUAL_EDITS", "false").lower() == "true"
 
@@ -113,7 +125,7 @@ async def view_dashboard(request: Request, run_id: str):
         raise HTTPException(404, "Run not found")
     return templates.TemplateResponse(request, "dashboard.html", {
         "run_id": run_id,
-        "metrics_json": json.dumps(run["report"]["metrics"]),
+        "metrics_json": _safe_json(run["report"]["metrics"]),
     })
 
 
