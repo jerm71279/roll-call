@@ -98,10 +98,13 @@ async def handle_upload(
     run_id = str(uuid.uuid4())
     _runs[run_id] = {"report": report, "teacher_names": teacher_names}
 
+    metrics_json = _safe_json(report["metrics"])
+
     return templates.TemplateResponse(request, "results.html", {
         "run_id": run_id,
         "report": report,
         "lock_edits": _LOCK_EDITS,
+        "metrics_json": metrics_json,
     })
 
 
@@ -117,16 +120,6 @@ async def view_results(request: Request, run_id: str, view: str = "summary"):
         "lock_edits": _LOCK_EDITS,
     })
 
-
-@app.get("/results/{run_id}/dashboard", response_class=HTMLResponse)
-async def view_dashboard(request: Request, run_id: str):
-    run = _runs.get(run_id)
-    if not run:
-        raise HTTPException(404, "Run not found")
-    return templates.TemplateResponse(request, "dashboard.html", {
-        "run_id": run_id,
-        "metrics_json": _safe_json(run["report"]["metrics"]),
-    })
 
 
 @app.get("/results/{run_id}/export")

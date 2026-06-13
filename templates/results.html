@@ -7,6 +7,9 @@
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
           integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
           crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+          integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF"
+          crossorigin="anonymous"></script>
   <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"
           integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"
           crossorigin="anonymous" defer></script>
@@ -34,18 +37,42 @@
     .summary-table td:not(:first-child) { text-align: center; }
     .summary-table th:not(:first-child) { text-align: center; }
     a.back { color: #1d4ed8; text-decoration: none; font-size: 0.85rem; }
+    /* Dashboard styles */
+    .dash-layout { display: flex; gap: 0; margin: 0 -24px; }
+    .dash-sidebar { width: 160px; background: #1e293b; padding: 16px 0; flex-shrink: 0; }
+    .dash-label { color: #64748b; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 0 14px 6px; }
+    .dash-item { display: block; padding: 8px 14px; color: #cbd5e1; font-size: 0.82rem; cursor: pointer; border-left: 3px solid transparent; }
+    .dash-item:hover { background: #334155; color: #fff; }
+    .dash-item.active { background: #1d4ed8; color: #fff; border-left-color: #60a5fa; }
+    .dash-main { flex: 1; padding: 20px 24px; overflow-x: auto; }
+    .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .kpi { background: #fff; border-radius: 8px; padding: 14px 18px; flex: 1; min-width: 100px; border: 1px solid #e2e8f0; }
+    .kpi-val { font-size: 1.8rem; font-weight: 800; color: #1d4ed8; line-height: 1; }
+    .kpi-lbl { font-size: 0.72rem; color: #64748b; margin-top: 3px; }
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 16px; }
+    .chart-card { background: #fff; border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0; }
+    .chart-card h4 { margin: 0 0 2px; font-size: 0.82rem; color: #374151; }
+    .chart-card .sub { font-size: 0.72rem; color: #9ca3af; margin-bottom: 10px; }
+    .chart-wrap { position: relative; height: 170px; }
+    .tbl-wrap { background: #fff; border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0; margin-bottom: 16px; overflow-x: auto; }
+    .tbl-wrap h4 { margin: 0 0 12px; font-size: 0.85rem; }
+    .pill { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+    .p-blue { background:#dbeafe;color:#1e40af; } .p-yellow { background:#fef9c3;color:#854d0e; }
+    .p-green { background:#dcfce7;color:#166534; } .p-red { background:#fee2e2;color:#b91c1c; }
+    .p-purple { background:#f3e8ff;color:#6b21a8; }
   </style>
 </head>
-<body x-data="{ view: '{{ view|default('summary') }}' }">
+<body x-data="appState()" x-init="initDash()">
 
   <h1>Roster Optimizer — Results</h1>
   <a class="back" href="/">← Upload new roster</a>
 
   <div class="toolbar" style="margin-top: 16px;">
-    <button class="btn" :class="{ active: view === 'summary' }" @click="view = 'summary'">Summary</button>
-    <button class="btn" :class="{ active: view === 'detail' }" @click="view = 'detail'">By Classroom</button>
+    <button class="btn" :class="{ active: view === 'summary' }"     @click="view = 'summary'">Summary</button>
+    <button class="btn" :class="{ active: view === 'detail' }"      @click="view = 'detail'">By Classroom</button>
     <button class="btn" :class="{ active: view === 'demographic' }" @click="view = 'demographic'">Demographic Index</button>
-    <a href="/results/{{ run_id }}/dashboard" class="btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">📊 Dashboard</a>
+    <button class="btn" :class="{ active: view === 'dashboard' }"   @click="view='dashboard'; $nextTick(()=>renderCharts())"
+            style="background:#7c3aed;color:#fff;border-color:#7c3aed;">Dashboard</button>
     <a href="/results/{{ run_id }}/export" class="btn btn-export">Export CSV</a>
   </div>
 
@@ -180,6 +207,254 @@
       </tbody>
     </table>
   </div>
+
+  {# ── DASHBOARD VIEW ───────────────────────────── #}
+  <div x-show="view === 'dashboard'" class="dash-layout">
+    <nav class="dash-sidebar">
+      <div class="dash-label">Grade</div>
+      <template x-for="(g, i) in dashMetrics" :key="g.grade">
+        <div class="dash-item" :class="{ active: dashGrade === i }" @click="dashGrade=i; $nextTick(()=>renderCharts())" x-text="g.grade_label"></div>
+      </template>
+      <div class="dash-label" style="margin-top:14px;">Category</div>
+      <div class="dash-item" :class="{ active: dashCat==='overview' }"  @click="dashCat='overview'">Overview</div>
+      <div class="dash-item" :class="{ active: dashCat==='gender' }"    @click="dashCat='gender';   $nextTick(()=>renderCharts())">Gender</div>
+      <div class="dash-item" :class="{ active: dashCat==='race' }"      @click="dashCat='race';     $nextTick(()=>renderCharts())">Demographics</div>
+      <div class="dash-item" :class="{ active: dashCat==='academic' }"  @click="dashCat='academic'; $nextTick(()=>renderCharts())">Academic</div>
+      <div class="dash-item" :class="{ active: dashCat==='flags' }"     @click="dashCat='flags';    $nextTick(()=>renderCharts())">Service Flags</div>
+    </nav>
+
+    <div class="dash-main">
+      <template x-if="currentGrade()">
+        <div>
+          <div style="font-size:1.1rem;font-weight:700;margin-bottom:2px" x-text="currentGrade().grade_label"></div>
+          <div style="font-size:0.8rem;color:#64748b;margin-bottom:16px" x-text="currentGrade().classrooms.length + ' classrooms · ' + dashTotal() + ' students'"></div>
+
+          <div class="kpi-row">
+            <div class="kpi"><div class="kpi-val" x-text="dashTotal()"></div><div class="kpi-lbl">Students</div></div>
+            <div class="kpi"><div class="kpi-val" x-text="dashFlag('IEP')"></div><div class="kpi-lbl">IEP</div></div>
+            <div class="kpi"><div class="kpi-val" x-text="dashFlag('Gifted')"></div><div class="kpi-lbl">Gifted</div></div>
+            <div class="kpi"><div class="kpi-val" x-text="dashFlag('ELL')"></div><div class="kpi-lbl">ELL</div></div>
+            <div class="kpi"><div class="kpi-val" x-text="dashFlag('Speech Only')"></div><div class="kpi-lbl">Speech</div></div>
+          </div>
+
+          {# Overview #}
+          <template x-if="dashCat === 'overview'">
+            <div class="tbl-wrap">
+              <h4>All Classrooms — Full Breakdown</h4>
+              <table>
+                <thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th><th>Female</th><th>Male</th>
+                  <template x-if="!currentGrade().is_kinder"><th>A-B%</th><th>F%</th><th>STAR</th><th>iReady</th></template>
+                  <template x-if="currentGrade().is_kinder"><th>High</th><th>Med</th><th>Low</th></template>
+                </tr></thead>
+                <tbody>
+                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                    <tr>
+                      <td x-text="c.teacher"></td><td x-text="c.total"></td>
+                      <td><span class="pill p-blue" x-text="c.flags['IEP']"></span></td>
+                      <td><span class="pill p-yellow" x-text="c.flags['Gifted']"></span></td>
+                      <td><span class="pill p-green" x-text="c.flags['ELL']"></span></td>
+                      <td><span class="pill p-purple" x-text="c.flags['Speech Only']"></span></td>
+                      <td x-text="c.gender['Female']"></td><td x-text="c.gender['Male']"></td>
+                      <template x-if="!currentGrade().is_kinder">
+                        <td><span class="pill p-green" x-text="c.academic['A-B%']+'%'"></span></td>
+                        <td><span class="pill p-red"   x-text="c.academic['F%']+'%'"></span></td>
+                        <td x-text="c.academic['STAR Rdg']"></td>
+                        <td x-text="c.academic['iReady Math']"></td>
+                      </template>
+                      <template x-if="currentGrade().is_kinder">
+                        <td x-text="c.academic['High']"></td>
+                        <td x-text="c.academic['Medium']"></td>
+                        <td x-text="c.academic['Low']"></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          {# Gender #}
+          <template x-if="dashCat === 'gender'">
+            <div>
+              <div class="tbl-wrap"><h4>Gender Balance</h4>
+                <table><thead><tr><th>Teacher</th><th>Total</th><th>Female</th><th>Male</th><th>% Female</th></tr></thead>
+                  <tbody>
+                    <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                      <tr><td x-text="c.teacher"></td><td x-text="c.total"></td>
+                        <td x-text="c.gender['Female']"></td><td x-text="c.gender['Male']"></td>
+                        <td x-text="c.total ? Math.round((c.gender['Female']||0)/c.total*100)+'%' : '—'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+              <div class="chart-grid">
+                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                    <div class="chart-wrap"><canvas :id="`ch-gender-${dashGrade}-${i}`"></canvas></div></div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          {# Demographics #}
+          <template x-if="dashCat === 'race'">
+            <div>
+              <div class="tbl-wrap"><h4>Demographics by Classroom</h4>
+                <table><thead><tr><th>Teacher</th>
+                  <template x-for="r in allRaces()" :key="r"><th x-text="r"></th></template>
+                </tr></thead>
+                <tbody>
+                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                    <tr><td x-text="c.teacher"></td>
+                      <template x-for="r in allRaces()" :key="r"><td x-text="c.race[r]||0"></td></template>
+                    </tr>
+                  </template>
+                </tbody></table>
+              </div>
+              <div class="chart-grid">
+                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                    <div class="chart-wrap"><canvas :id="`ch-race-${dashGrade}-${i}`"></canvas></div></div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          {# Academic #}
+          <template x-if="dashCat === 'academic'">
+            <div>
+              <div class="tbl-wrap">
+                <h4 x-text="currentGrade().is_kinder ? 'Readiness Tiers' : 'Academic Performance'"></h4>
+                <table><thead><tr><th>Teacher</th>
+                  <template x-if="currentGrade().is_kinder"><th>High</th><th>Medium</th><th>Low</th></template>
+                  <template x-if="!currentGrade().is_kinder"><th>Avg A-B%</th><th>Avg C-D%</th><th>Avg F%</th><th>STAR Rdg</th><th>iReady</th></template>
+                </tr></thead>
+                <tbody>
+                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                    <tr><td x-text="c.teacher"></td>
+                      <template x-if="currentGrade().is_kinder">
+                        <td x-text="c.academic['High']"></td><td x-text="c.academic['Medium']"></td><td x-text="c.academic['Low']"></td>
+                      </template>
+                      <template x-if="!currentGrade().is_kinder">
+                        <td><span class="pill p-green" x-text="c.academic['A-B%']+'%'"></span></td>
+                        <td x-text="c.academic['C-D%']+'%'"></td>
+                        <td><span class="pill p-red" x-text="c.academic['F%']+'%'"></span></td>
+                        <td x-text="c.academic['STAR Rdg']"></td><td x-text="c.academic['iReady Math']"></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody></table>
+              </div>
+              <div class="chart-grid">
+                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                    <div class="chart-wrap"><canvas :id="`ch-academic-${dashGrade}-${i}`"></canvas></div></div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          {# Service Flags #}
+          <template x-if="dashCat === 'flags'">
+            <div>
+              <div class="tbl-wrap"><h4>Service Flags by Classroom</h4>
+                <table><thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th><th>No Flag</th></tr></thead>
+                <tbody>
+                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                    <tr><td x-text="c.teacher"></td><td x-text="c.total"></td>
+                      <td><span class="pill p-blue" x-text="c.flags['IEP']"></span></td>
+                      <td><span class="pill p-yellow" x-text="c.flags['Gifted']"></span></td>
+                      <td><span class="pill p-green" x-text="c.flags['ELL']"></span></td>
+                      <td><span class="pill p-purple" x-text="c.flags['Speech Only']"></span></td>
+                      <td x-text="c.flags['No Flag']||0"></td>
+                    </tr>
+                  </template>
+                </tbody></table>
+              </div>
+              <div class="chart-grid">
+                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                    <div class="chart-wrap"><canvas :id="`ch-flags-${dashGrade}-${i}`"></canvas></div></div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+        </div>
+      </template>
+    </div>
+  </div>
+
+<script>
+const METRICS = {{ metrics_json | safe }};
+const PALETTE = {
+  gender:   ['#3b82f6','#f472b6','#94a3b8'],
+  race:     ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444','#14b8a6','#f97316'],
+  academic: ['#22c55e','#f59e0b','#ef4444'],
+  kinder:   ['#22c55e','#f59e0b','#ef4444'],
+  flags:    ['#3b82f6','#fbbf24','#22c55e','#a855f7','#e2e8f0'],
+};
+const _charts = {};
+
+function makeChart(id, type, labels, data, colors) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (_charts[id]) { _charts[id].destroy(); }
+  _charts[id] = new Chart(el, {
+    type,
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 1, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10, padding: 6 } } } },
+  });
+}
+
+function appState() {
+  return {
+    view: '{{ view|default("summary") }}',
+    dashMetrics: METRICS,
+    dashGrade: 0,
+    dashCat: 'overview',
+
+    initDash() {},
+    currentGrade() { return this.dashMetrics[this.dashGrade] || null; },
+    dashTotal() { return this.currentGrade()?.classrooms.reduce((s,c) => s+c.total, 0) || 0; },
+    dashFlag(f) { return this.currentGrade()?.classrooms.reduce((s,c) => s+(c.flags[f]||0), 0) || 0; },
+    allRaces() {
+      const races = new Set();
+      this.currentGrade()?.classrooms.forEach(c => Object.keys(c.race).forEach(r => races.add(r)));
+      return [...races].sort();
+    },
+    renderCharts() {
+      const g = this.currentGrade();
+      if (!g || this.dashCat === 'overview') return;
+      const gi = this.dashGrade;
+      const cat = this.dashCat;
+      g.classrooms.forEach((c, i) => {
+        if (cat === 'gender') {
+          makeChart(`ch-gender-${gi}-${i}`, 'pie',
+            ['Female','Male','Other'], ['Female','Male','Other'].map(l => c.gender[l]||0), PALETTE.gender);
+        } else if (cat === 'race') {
+          makeChart(`ch-race-${gi}-${i}`, 'pie',
+            Object.keys(c.race), Object.values(c.race), PALETTE.race);
+        } else if (cat === 'academic') {
+          if (g.is_kinder) {
+            makeChart(`ch-academic-${gi}-${i}`, 'pie',
+              ['High','Medium','Low'], ['High','Medium','Low'].map(l => c.academic[l]||0), PALETTE.kinder);
+          } else {
+            makeChart(`ch-academic-${gi}-${i}`, 'doughnut',
+              ['A-B%','C-D%','F%'], [c.academic['A-B%'], c.academic['C-D%'], c.academic['F%']], PALETTE.academic);
+          }
+        } else if (cat === 'flags') {
+          makeChart(`ch-flags-${gi}-${i}`, 'pie',
+            ['IEP','Gifted','ELL','Speech Only','No Flag'],
+            ['IEP','Gifted','ELL','Speech Only','No Flag'].map(l => c.flags[l]||0), PALETTE.flags);
+        }
+      });
+    },
+  };
+}
+</script>
 
 </body>
 </html>
