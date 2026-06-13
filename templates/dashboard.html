@@ -325,8 +325,9 @@
   </main>
 </div>
 
+<script type="application/json" id="metrics-data">{{ metrics_json }}</script>
 <script>
-const METRICS = {{ metrics_json | safe }};
+const METRICS = JSON.parse(document.getElementById('metrics-data').textContent);
 
 const PALETTE = {
   gender:   ['#3b82f6','#f472b6','#94a3b8'],
