@@ -109,63 +109,76 @@
   </div>
 
   {# ── DETAIL VIEW (by classroom) ───────────────── #}
-  <div x-show="view === 'detail'">
-    {% set grades = report.rows | map(attribute='grade') | unique | list | sort %}
-    {% for grade in grades %}
-    {% set grade_rows = report.rows | selectattr('grade', 'eq', grade) | list %}
-    {% set classrooms = grade_rows | map(attribute='classroom') | unique | list | sort %}
-    <div class="grade-block">
-      <div class="grade-label">{{ 'Kinder' if grade == 0 else 'Grade ' ~ grade }}</div>
-      {% for c in classrooms %}
-      {% set c_rows = grade_rows | selectattr('classroom', 'eq', c) | list | sort(attribute='last_name') %}
-      {% set teacher = c_rows[0].teacher if c_rows else 'Class ' ~ c %}
-      <div style="margin-bottom: 20px;">
-        <strong>{{ teacher }}</strong> ({{ c_rows | length }} students)
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
-            {% if not lock_edits %}<th>Move to</th>{% endif %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in c_rows %}
-            <tr>
-              <td>{{ row.last_name }}, {{ row.first_name }}</td>
-              <td>{{ row.gender }}</td>
-              <td>{{ row.race }}</td>
-              <td>
-                {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
-                {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
-                {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
-                {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
-              </td>
-              <td>{{ row.ab_average }}</td>
-              <td>{{ row.star_reading }}</td>
-              <td>{{ row.iready_math }}</td>
-              {% if not lock_edits %}
-              <td>
-                <select class="edit-select"
-                  hx-post="/results/{{ run_id }}/reassign"
-                  hx-trigger="change"
-                  hx-swap="none"
-                  hx-vals='{"student_id": "{{ row.student_id }}"}'
-                  name="classroom">
-                  {% for opt in classrooms %}
-                  <option value="{{ opt }}" {% if opt == c %}selected{% endif %}>
-                    {{ grade_rows | selectattr('classroom', 'eq', opt) | map(attribute='teacher') | first | default('Class ' ~ opt) }}
-                  </option>
-                  {% endfor %}
-                </select>
-              </td>
-              {% endif %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  {% set detail_grades = report.rows | map(attribute='grade') | unique | list | sort %}
+  <div x-show="view === 'detail'" class="dash-layout" x-data="{ detailGrade: {{ detail_grades[0] if detail_grades else 0 }} }">
+
+    <nav class="dash-sidebar">
+      <div class="dash-label">Grade</div>
+      {% for grade in detail_grades %}
+      <div class="dash-item" :class="{ active: detailGrade === {{ grade }} }"
+           @click="detailGrade = {{ grade }}">
+        {{ 'Kinder' if grade == 0 else 'Grade ' ~ grade }}
+      </div>
+      {% endfor %}
+    </nav>
+
+    <div class="dash-main">
+      {% for grade in detail_grades %}
+      {% set grade_rows = report.rows | selectattr('grade', 'eq', grade) | list %}
+      {% set classrooms = grade_rows | map(attribute='classroom') | unique | list | sort %}
+      <div x-show="detailGrade === {{ grade }}">
+        {% for c in classrooms %}
+        {% set c_rows = grade_rows | selectattr('classroom', 'eq', c) | list | sort(attribute='last_name') %}
+        {% set teacher = c_rows[0].teacher if c_rows else 'Class ' ~ c %}
+        <div style="margin-bottom: 24px;">
+          <strong>{{ teacher }}</strong>
+          <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">{{ c_rows | length }} students</span>
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
+              {% if not lock_edits %}<th>Move to</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in c_rows %}
+              <tr>
+                <td>{{ row.last_name }}, {{ row.first_name }}</td>
+                <td>{{ row.gender }}</td>
+                <td>{{ row.race }}</td>
+                <td>
+                  {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
+                  {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
+                  {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
+                  {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
+                </td>
+                <td>{{ row.ab_average }}</td>
+                <td>{{ row.star_reading }}</td>
+                <td>{{ row.iready_math }}</td>
+                {% if not lock_edits %}
+                <td>
+                  <select class="edit-select"
+                    hx-post="/results/{{ run_id }}/reassign"
+                    hx-trigger="change"
+                    hx-swap="none"
+                    hx-vals='{"student_id": "{{ row.student_id }}"}'
+                    name="classroom">
+                    {% for opt in classrooms %}
+                    <option value="{{ opt }}" {% if opt == c %}selected{% endif %}>
+                      {{ grade_rows | selectattr('classroom', 'eq', opt) | map(attribute='teacher') | first | default('Class ' ~ opt) }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endfor %}
       </div>
       {% endfor %}
     </div>
-    {% endfor %}
   </div>
 
   {# ── DEMOGRAPHIC INDEX VIEW ───────────────────── #}
