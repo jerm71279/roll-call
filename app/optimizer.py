@@ -104,6 +104,7 @@ def optimize_grade(packet: GradePacket, timeout: int = _TIMEOUT) -> AssignmentRe
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout
+    solver.parameters.num_search_workers = 4  # parallel workers for faster feasible solutions
 
     start = time.time()
     status = solver.Solve(model)

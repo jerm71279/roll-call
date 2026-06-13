@@ -65,7 +65,11 @@ async def handle_upload(
     except ValueError as e:
         return templates.TemplateResponse("upload.html", {"request": request, "error": str(e)})
 
-    results = [optimize_grade(p) for p in packets]
+    # Divide solver budget evenly across grades so all-grades runs stay inside
+    # Render's 30s HTTP timeout (SOLVER_TIMEOUT_SECONDS defaults to 25 in prod).
+    _SOLVER_TIMEOUT = int(os.environ.get("SOLVER_TIMEOUT_SECONDS", "60"))
+    per_grade_timeout = max(3, _SOLVER_TIMEOUT // max(len(packets), 1))
+    results = [optimize_grade(p, timeout=per_grade_timeout) for p in packets]
 
     # build teacher_names map from teacher roster
     import csv as csv_mod, io
