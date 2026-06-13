@@ -45,6 +45,7 @@
     <button class="btn" :class="{ active: view === 'summary' }" @click="view = 'summary'">Summary</button>
     <button class="btn" :class="{ active: view === 'detail' }" @click="view = 'detail'">By Classroom</button>
     <button class="btn" :class="{ active: view === 'demographic' }" @click="view = 'demographic'">Demographic Index</button>
+    <a href="/results/{{ run_id }}/dashboard" class="btn" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">📊 Dashboard</a>
     <a href="/results/{{ run_id }}/export" class="btn btn-export">Export CSV</a>
   </div>
 

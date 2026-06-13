@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roll-Call — Dashboard</title>
+  <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"
+          integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"
+          crossorigin="anonymous" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"
+          integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF"
+          crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #111; }
+    .topbar { background: #1d4ed8; color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 20px; }
+    .topbar h1 { font-size: 1.1rem; margin: 0; }
+    .topbar a { color: #bfdbfe; text-decoration: none; font-size: 0.85rem; }
+    .topbar a:hover { color: #fff; }
+    .layout { display: flex; min-height: calc(100vh - 50px); }
+
+    /* Sidebar */
+    .sidebar { width: 180px; background: #1e293b; padding: 20px 0; flex-shrink: 0; }
+    .sidebar-label { color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: .08em; padding: 0 16px 8px; }
+    .sidebar-item { display: block; padding: 9px 16px; color: #cbd5e1; font-size: 0.85rem;
+                    cursor: pointer; border-left: 3px solid transparent; transition: all .15s; }
+    .sidebar-item:hover { background: #334155; color: #fff; }
+    .sidebar-item.active { background: #1d4ed8; color: #fff; border-left-color: #60a5fa; }
+
+    /* Main */
+    .main { flex: 1; padding: 28px; overflow-x: auto; }
+    .section-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 4px; }
+    .section-sub { color: #64748b; font-size: 0.82rem; margin-bottom: 24px; }
+
+    /* KPI cards */
+    .kpi-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+    .kpi { background: #fff; border-radius: 10px; padding: 16px 22px; flex: 1; min-width: 120px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.08); border: 1px solid #e2e8f0; }
+    .kpi-val { font-size: 2rem; font-weight: 800; line-height: 1; color: #1d4ed8; }
+    .kpi-label { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+
+    /* Chart grid */
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-bottom: 28px; }
+    .chart-card { background: #fff; border-radius: 10px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+                  border: 1px solid #e2e8f0; }
+    .chart-card h3 { font-size: 0.85rem; font-weight: 700; margin: 0 0 4px; color: #374151; }
+    .chart-card .teacher-sub { font-size: 0.75rem; color: #6b7280; margin-bottom: 12px; }
+    .chart-wrap { position: relative; height: 180px; }
+
+    /* Comparison table */
+    .table-wrap { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+                  border: 1px solid #e2e8f0; margin-bottom: 24px; overflow-x: auto; }
+    .table-wrap h3 { font-size: 0.9rem; font-weight: 700; margin: 0 0 14px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { background: #f1f5f9; padding: 8px 12px; text-align: left; border-bottom: 2px solid #e2e8f0;
+         white-space: nowrap; }
+    th:not(:first-child) { text-align: center; }
+    td { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; }
+    td:not(:first-child) { text-align: center; }
+    tr:last-child td { border-bottom: none; }
+    .bar-cell { display: flex; align-items: center; gap: 6px; justify-content: center; }
+    .bar { height: 8px; border-radius: 4px; background: #3b82f6; min-width: 2px; }
+    .pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+    .pill-blue  { background:#dbeafe; color:#1e40af; }
+    .pill-green { background:#dcfce7; color:#166534; }
+    .pill-red   { background:#fee2e2; color:#b91c1c; }
+    .pill-yellow{ background:#fef9c3; color:#854d0e; }
+    .pill-purple{ background:#f3e8ff; color:#6b21a8; }
+
+    /* Category toggle */
+    .cat-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .cat-tab { padding: 6px 14px; border-radius: 6px; border: 1px solid #d1d5db; background: #fff;
+               cursor: pointer; font-size: 0.82rem; }
+    .cat-tab.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+  </style>
+</head>
+<body x-data="dashboard()" x-init="init()">
+
+<div class="topbar">
+  <h1>Roll-Call — Metrics Dashboard</h1>
+  <a href="/results/{{ run_id }}">← Back to Results</a>
+  <a href="/results/{{ run_id }}/export" style="margin-left:auto;">Export CSV</a>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar: grade selector -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Grade</div>
+    <template x-for="(g, i) in metrics" :key="g.grade">
+      <div class="sidebar-item" :class="{ active: activeGrade === i }" @click="setGrade(i)" x-text="g.grade_label"></div>
+    </template>
+    <div class="sidebar-label" style="margin-top:20px;">View</div>
+    <div class="sidebar-item" :class="{ active: activeView === 'overview' }" @click="activeView='overview'">Overview</div>
+    <div class="sidebar-item" :class="{ active: activeView === 'gender' }" @click="activeView='gender'">Gender</div>
+    <div class="sidebar-item" :class="{ active: activeView === 'race' }" @click="activeView='race'">Demographics</div>
+    <div class="sidebar-item" :class="{ active: activeView === 'academic' }" @click="activeView='academic'">Academic</div>
+    <div class="sidebar-item" :class="{ active: activeView === 'flags' }" @click="activeView='flags'">Service Flags</div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+    <template x-if="grade">
+
+      <div>
+        <!-- Section header -->
+        <div class="section-title" x-text="grade.grade_label + ' — ' + viewLabel()"></div>
+        <div class="section-sub" x-text="grade.classrooms.length + ' classrooms · ' + totalStudents() + ' students'"></div>
+
+        <!-- KPI row -->
+        <div class="kpi-row">
+          <div class="kpi"><div class="kpi-val" x-text="totalStudents()"></div><div class="kpi-label">Total Students</div></div>
+          <div class="kpi"><div class="kpi-val" x-text="totalFlag('IEP')"></div><div class="kpi-label">IEP</div></div>
+          <div class="kpi"><div class="kpi-val" x-text="totalFlag('Gifted')"></div><div class="kpi-label">Gifted</div></div>
+          <div class="kpi"><div class="kpi-val" x-text="totalFlag('ELL')"></div><div class="kpi-label">ELL</div></div>
+          <div class="kpi"><div class="kpi-val" x-text="totalFlag('Speech Only')"></div><div class="kpi-label">Speech Only</div></div>
+        </div>
+
+        <!-- OVERVIEW ─────────────────────────────────────── -->
+        <template x-if="activeView === 'overview'">
+          <div>
+            <div class="table-wrap">
+              <h3>Classroom Comparison — All Metrics</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Teacher</th><th>Students</th>
+                    <th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th>
+                    <th>Female</th><th>Male</th>
+                    <template x-if="!grade.is_kinder"><th>Avg A-B%</th><th>Avg F%</th><th>STAR Rdg</th><th>iReady</th></template>
+                    <template x-if="grade.is_kinder"><th>High</th><th>Med</th><th>Low</th></template>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in grade.classrooms" :key="c.teacher">
+                    <tr>
+                      <td x-text="c.teacher"></td>
+                      <td x-text="c.total"></td>
+                      <td><span class="pill pill-blue" x-text="c.flags['IEP']"></span></td>
+                      <td><span class="pill pill-yellow" x-text="c.flags['Gifted']"></span></td>
+                      <td><span class="pill pill-green" x-text="c.flags['ELL']"></span></td>
+                      <td><span class="pill pill-purple" x-text="c.flags['Speech Only']"></span></td>
+                      <td x-text="c.gender['Female']"></td>
+                      <td x-text="c.gender['Male']"></td>
+                      <template x-if="!grade.is_kinder">
+                        <td x-text="c.academic['A-B%'] + '%'"></td>
+                        <td x-text="c.academic['F%'] + '%'"></td>
+                        <td x-text="c.academic['STAR Rdg']"></td>
+                        <td x-text="c.academic['iReady Math']"></td>
+                      </template>
+                      <template x-if="grade.is_kinder">
+                        <td x-text="c.academic['High']"></td>
+                        <td x-text="c.academic['Medium']"></td>
+                        <td x-text="c.academic['Low']"></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+
+        <!-- GENDER ─────────────────────────────────────── -->
+        <template x-if="activeView === 'gender'">
+          <div>
+            <div class="table-wrap">
+              <h3>Gender Balance by Classroom</h3>
+              <table>
+                <thead><tr><th>Teacher</th><th>Total</th><th>Female</th><th>Male</th><th>Other</th><th>% Female</th></tr></thead>
+                <tbody>
+                  <template x-for="c in grade.classrooms" :key="c.teacher">
+                    <tr>
+                      <td x-text="c.teacher"></td>
+                      <td x-text="c.total"></td>
+                      <td x-text="c.gender['Female']"></td>
+                      <td x-text="c.gender['Male']"></td>
+                      <td x-text="c.gender['Other'] || 0"></td>
+                      <td>
+                        <div class="bar-cell">
+                          <div class="bar" :style="`width:${Math.round((c.gender['Female']||0)/c.total*60)}px`"></div>
+                          <span x-text="c.total ? Math.round((c.gender['Female']||0)/c.total*100)+'%' : '—'"></span>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="chart-grid">
+              <template x-for="(c, i) in grade.classrooms" :key="c.teacher">
+                <div class="chart-card">
+                  <h3 x-text="c.teacher"></h3>
+                  <div class="teacher-sub" x-text="c.total + ' students'"></div>
+                  <div class="chart-wrap"><canvas :id="`gender-${activeGrade}-${i}`"></canvas></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- RACE ─────────────────────────────────────── -->
+        <template x-if="activeView === 'race'">
+          <div>
+            <div class="table-wrap">
+              <h3>Demographics by Classroom</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Teacher</th>
+                    <template x-for="r in allRaces()" :key="r"><th x-text="r"></th></template>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in grade.classrooms" :key="c.teacher">
+                    <tr>
+                      <td x-text="c.teacher"></td>
+                      <template x-for="r in allRaces()" :key="r">
+                        <td x-text="c.race[r] || 0"></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="chart-grid">
+              <template x-for="(c, i) in grade.classrooms" :key="c.teacher">
+                <div class="chart-card">
+                  <h3 x-text="c.teacher"></h3>
+                  <div class="teacher-sub" x-text="c.total + ' students'"></div>
+                  <div class="chart-wrap"><canvas :id="`race-${activeGrade}-${i}`"></canvas></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- ACADEMIC ─────────────────────────────────────── -->
+        <template x-if="activeView === 'academic'">
+          <div>
+            <div class="table-wrap">
+              <h3 x-text="grade.is_kinder ? 'Readiness Tiers by Classroom' : 'Academic Performance by Classroom'"></h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Teacher</th>
+                    <template x-if="grade.is_kinder">
+                      <th>High</th><th>Medium</th><th>Low</th>
+                    </template>
+                    <template x-if="!grade.is_kinder">
+                      <th>Avg A-B%</th><th>Avg C-D%</th><th>Avg F%</th><th>STAR Reading</th><th>iReady Math</th>
+                    </template>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in grade.classrooms" :key="c.teacher">
+                    <tr>
+                      <td x-text="c.teacher"></td>
+                      <template x-if="grade.is_kinder">
+                        <td x-text="c.academic['High']"></td>
+                        <td x-text="c.academic['Medium']"></td>
+                        <td x-text="c.academic['Low']"></td>
+                      </template>
+                      <template x-if="!grade.is_kinder">
+                        <td><span class="pill pill-green" x-text="c.academic['A-B%'] + '%'"></span></td>
+                        <td x-text="c.academic['C-D%'] + '%'"></td>
+                        <td><span class="pill pill-red" x-text="c.academic['F%'] + '%'"></span></td>
+                        <td x-text="c.academic['STAR Rdg']"></td>
+                        <td x-text="c.academic['iReady Math']"></td>
+                      </template>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="chart-grid">
+              <template x-for="(c, i) in grade.classrooms" :key="c.teacher">
+                <div class="chart-card">
+                  <h3 x-text="c.teacher"></h3>
+                  <div class="teacher-sub" x-text="c.total + ' students'"></div>
+                  <div class="chart-wrap"><canvas :id="`academic-${activeGrade}-${i}`"></canvas></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- FLAGS ─────────────────────────────────────── -->
+        <template x-if="activeView === 'flags'">
+          <div>
+            <div class="table-wrap">
+              <h3>Service Flags by Classroom</h3>
+              <table>
+                <thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech Only</th><th>No Flag</th></tr></thead>
+                <tbody>
+                  <template x-for="c in grade.classrooms" :key="c.teacher">
+                    <tr>
+                      <td x-text="c.teacher"></td>
+                      <td x-text="c.total"></td>
+                      <td><span class="pill pill-blue" x-text="c.flags['IEP']"></span></td>
+                      <td><span class="pill pill-yellow" x-text="c.flags['Gifted']"></span></td>
+                      <td><span class="pill pill-green" x-text="c.flags['ELL']"></span></td>
+                      <td><span class="pill pill-purple" x-text="c.flags['Speech Only']"></span></td>
+                      <td x-text="c.flags['No Flag']"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="chart-grid">
+              <template x-for="(c, i) in grade.classrooms" :key="c.teacher">
+                <div class="chart-card">
+                  <h3 x-text="c.teacher"></h3>
+                  <div class="teacher-sub" x-text="c.total + ' students'"></div>
+                  <div class="chart-wrap"><canvas :id="`flags-${activeGrade}-${i}`"></canvas></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </template>
+  </main>
+</div>
+
+<script>
+const METRICS = {{ metrics_json | safe }};
+
+const PALETTE = {
+  gender:   ['#3b82f6','#f472b6','#94a3b8'],
+  race:     ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444','#14b8a6','#f97316'],
+  academic: ['#22c55e','#f59e0b','#ef4444'],
+  kinder:   ['#22c55e','#f59e0b','#ef4444'],
+  flags:    ['#3b82f6','#fbbf24','#22c55e','#a855f7','#e2e8f0'],
+};
+
+function dashboard() {
+  return {
+    metrics: METRICS,
+    activeGrade: 0,
+    activeView: 'overview',
+    grade: null,
+    _charts: {},
+
+    init() {
+      this.grade = this.metrics[0] || null;
+      this.$watch('activeGrade', () => { this.grade = this.metrics[this.activeGrade]; this.$nextTick(() => this.renderCharts()); });
+      this.$watch('activeView', () => { this.$nextTick(() => this.renderCharts()); });
+      this.$nextTick(() => this.renderCharts());
+    },
+
+    setGrade(i) { this.activeGrade = i; },
+
+    viewLabel() {
+      return { overview:'Overview', gender:'Gender', race:'Demographics', academic:'Academic', flags:'Service Flags' }[this.activeView] || '';
+    },
+
+    totalStudents() { return this.grade?.classrooms.reduce((s,c) => s + c.total, 0) || 0; },
+    totalFlag(f) { return this.grade?.classrooms.reduce((s,c) => s + (c.flags[f]||0), 0) || 0; },
+    allRaces() {
+      const races = new Set();
+      this.grade?.classrooms.forEach(c => Object.keys(c.race).forEach(r => races.add(r)));
+      return [...races].sort();
+    },
+
+    destroyCharts(prefix) {
+      Object.keys(this._charts).filter(k => k.startsWith(prefix)).forEach(k => {
+        this._charts[k].destroy(); delete this._charts[k];
+      });
+    },
+
+    makeChart(id, type, labels, data, colors) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (this._charts[id]) this._charts[id].destroy();
+      this._charts[id] = new Chart(el, {
+        type,
+        data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 1, borderColor: '#fff' }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10, padding: 8 } } },
+        },
+      });
+    },
+
+    renderCharts() {
+      if (!this.grade) return;
+      const g = this.activeGrade;
+      const v = this.activeView;
+
+      this.destroyCharts(`${v}-${g}`);
+
+      this.grade.classrooms.forEach((c, i) => {
+        if (v === 'gender') {
+          const labels = ['Female','Male','Other'];
+          const data   = labels.map(l => c.gender[l] || 0);
+          this.makeChart(`gender-${g}-${i}`, 'pie', labels, data, PALETTE.gender);
+
+        } else if (v === 'race') {
+          const labels = Object.keys(c.race);
+          const data   = Object.values(c.race);
+          this.makeChart(`race-${g}-${i}`, 'pie', labels, data, PALETTE.race);
+
+        } else if (v === 'academic') {
+          if (c.is_kinder) {
+            const labels = ['High','Medium','Low'];
+            const data   = labels.map(l => c.academic[l] || 0);
+            this.makeChart(`academic-${g}-${i}`, 'pie', labels, data, PALETTE.kinder);
+          } else {
+            const labels = ['A-B%','C-D%','F%'];
+            const data   = [c.academic['A-B%'], c.academic['C-D%'], c.academic['F%']];
+            this.makeChart(`academic-${g}-${i}`, 'doughnut', labels, data, PALETTE.academic);
+          }
+
+        } else if (v === 'flags') {
+          const labels = ['IEP','Gifted','ELL','Speech Only','No Flag'];
+          const data   = labels.map(l => c.flags[l] || 0);
+          this.makeChart(`flags-${g}-${i}`, 'pie', labels, data, PALETTE.flags);
+        }
+      });
+    },
+  };
+}
+</script>
+</body>
+</html>

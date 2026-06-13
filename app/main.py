@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import os
 import uuid
 from pathlib import Path
@@ -102,6 +103,17 @@ async def view_results(request: Request, run_id: str, view: str = "summary"):
         "report": run["report"],
         "view": view,
         "lock_edits": _LOCK_EDITS,
+    })
+
+
+@app.get("/results/{run_id}/dashboard", response_class=HTMLResponse)
+async def view_dashboard(request: Request, run_id: str):
+    run = _runs.get(run_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    return templates.TemplateResponse(request, "dashboard.html", {
+        "run_id": run_id,
+        "metrics_json": json.dumps(run["report"]["metrics"]),
     })
 
 

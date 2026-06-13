@@ -76,10 +76,85 @@ def build_report(
             "classrooms": classroom_stats,
         })
 
+    metrics = build_metrics(rows, results, teacher_names)
+
     return {
         "rows": rows,
         "summary": summary,
+        "metrics": metrics,
     }
+
+
+def build_metrics(
+    rows: list[dict],
+    results: list[AssignmentResult],
+    teacher_names: dict[int, list[str]],
+) -> list[dict]:
+    """Per-grade, per-classroom breakdown data for dashboard charts."""
+    grades_out = []
+    for result in results:
+        grade = result.grade
+        is_kinder = grade == 0
+        grade_rows = [r for r in rows if r["grade"] == grade]
+        grade_teachers = teacher_names.get(grade, [])
+        n_classrooms = max(result.assignments.values()) + 1 if result.assignments else 0
+
+        classrooms_out = []
+        for c_idx in range(n_classrooms):
+            c_rows = [r for r in grade_rows if r["classroom"] == c_idx + 1]
+            teacher = grade_teachers[c_idx] if c_idx < len(grade_teachers) else f"Class {c_idx + 1}"
+            n = len(c_rows)
+
+            gender = {
+                "Male": sum(1 for r in c_rows if r["gender"].upper() in ("M", "MALE")),
+                "Female": sum(1 for r in c_rows if r["gender"].upper() in ("F", "FEMALE")),
+                "Other": sum(1 for r in c_rows if r["gender"].upper() not in ("M", "MALE", "F", "FEMALE")),
+            }
+
+            race_counts: dict[str, int] = {}
+            for r in c_rows:
+                race_counts[r["race"]] = race_counts.get(r["race"], 0) + 1
+
+            flags = {
+                "IEP": sum(1 for r in c_rows if r["iep"]),
+                "Gifted": sum(1 for r in c_rows if r["gifted"]),
+                "ELL": sum(1 for r in c_rows if r["ell"]),
+                "Speech Only": sum(1 for r in c_rows if r["speech_only"]),
+                "No Flag": sum(1 for r in c_rows if not any([r["iep"], r["gifted"], r["ell"], r["speech_only"]])),
+            }
+
+            if is_kinder:
+                academic = {
+                    "High": sum(1 for r in c_rows if r["kinder_high"]),
+                    "Medium": sum(1 for r in c_rows if r["kinder_medium"]),
+                    "Low": sum(1 for r in c_rows if r["kinder_low"]),
+                }
+            else:
+                avg_ab  = round(sum(r["ab_average"] for r in c_rows) / n, 1) if n else 0
+                avg_cd  = round(sum(r["cd_average"] for r in c_rows) / n, 1) if n else 0
+                avg_f   = round(sum(r["f_average"] for r in c_rows) / n, 1) if n else 0
+                avg_star = round(sum(r["star_reading"] for r in c_rows) / n, 2) if n else 0
+                avg_math = round(sum(r["iready_math"] for r in c_rows) / n, 2) if n else 0
+                academic = {"A-B%": avg_ab, "C-D%": avg_cd, "F%": avg_f,
+                            "STAR Rdg": avg_star, "iReady Math": avg_math}
+
+            classrooms_out.append({
+                "teacher": teacher,
+                "total": n,
+                "gender": gender,
+                "race": race_counts,
+                "flags": flags,
+                "academic": academic,
+                "is_kinder": is_kinder,
+            })
+
+        grades_out.append({
+            "grade": grade,
+            "grade_label": "Kinder" if grade == 0 else f"Grade {grade}",
+            "is_kinder": is_kinder,
+            "classrooms": classrooms_out,
+        })
+    return grades_out
 
 
 def reassign_student(
