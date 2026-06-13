@@ -118,6 +118,7 @@ async def view_results(request: Request, run_id: str, view: str = "summary"):
         "report": run["report"],
         "view": view,
         "lock_edits": _LOCK_EDITS,
+        "metrics_json": _safe_json(run["report"]["metrics"]),
     })
 
 

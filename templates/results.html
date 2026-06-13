@@ -14,9 +14,9 @@
           integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh"
           crossorigin="anonymous" defer></script>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 32px auto; padding: 0 24px; color: #111; }
+    body { font-family: system-ui, sans-serif; margin: 32px auto; padding: 0 24px; color: #111; max-width: 1200px; }
     h1 { font-size: 1.4rem; margin-bottom: 4px; }
-    .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 24px; flex-wrap: wrap; }
+    .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
     .btn { padding: 8px 18px; border-radius: 5px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; font-size: 0.9rem; }
     .btn.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
     .btn-export { background: #16a34a; color: #fff; border-color: #16a34a; }
@@ -37,14 +37,15 @@
     .summary-table td:not(:first-child) { text-align: center; }
     .summary-table th:not(:first-child) { text-align: center; }
     a.back { color: #1d4ed8; text-decoration: none; font-size: 0.85rem; }
-    /* Dashboard styles */
-    .dash-layout { display: flex; gap: 0; margin: 0 -24px; }
-    .dash-sidebar { width: 160px; background: #1e293b; padding: 16px 0; flex-shrink: 0; }
-    .dash-label { color: #64748b; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 0 14px 6px; }
-    .dash-item { display: block; padding: 8px 14px; color: #cbd5e1; font-size: 0.82rem; cursor: pointer; border-left: 3px solid transparent; }
-    .dash-item:hover { background: #334155; color: #fff; }
-    .dash-item.active { background: #1d4ed8; color: #fff; border-left-color: #60a5fa; }
-    .dash-main { flex: 1; padding: 20px 24px; overflow-x: auto; }
+    /* Persistent sidebar layout */
+    .page-layout { display: flex; gap: 0; margin: 0 -24px; }
+    .sidebar { width: 160px; background: #1e293b; padding: 16px 0; flex-shrink: 0; min-height: 400px; }
+    .sidebar-label { color: #64748b; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 0 14px 6px; }
+    .sidebar-item { display: block; padding: 8px 14px; color: #cbd5e1; font-size: 0.82rem; cursor: pointer; border-left: 3px solid transparent; }
+    .sidebar-item:hover { background: #334155; color: #fff; }
+    .sidebar-item.active { background: #1d4ed8; color: #fff; border-left-color: #60a5fa; }
+    .main-content { flex: 1; padding: 20px 24px; overflow-x: auto; }
+    /* KPI / Chart styles */
     .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
     .kpi { background: #fff; border-radius: 8px; padding: 14px 18px; flex: 1; min-width: 100px; border: 1px solid #e2e8f0; }
     .kpi-val { font-size: 1.8rem; font-weight: 800; color: #1d4ed8; line-height: 1; }
@@ -62,114 +63,78 @@
     .p-purple { background:#f3e8ff;color:#6b21a8; }
   </style>
 </head>
-<body x-data="appState()" x-init="initDash()">
+<body x-data="appState()" x-init="initDash()" @roster-changed.document="dirty = true">
 
   <h1>Roster Optimizer — Results</h1>
   <a class="back" href="/">← Upload new roster</a>
 
+  {# Module toolbar #}
   <div class="toolbar" style="margin-top: 16px;">
     <button class="btn" :class="{ active: view === 'summary' }"     @click="view = 'summary'">Summary</button>
     <button class="btn" :class="{ active: view === 'detail' }"      @click="view = 'detail'">By Classroom</button>
     <button class="btn" :class="{ active: view === 'demographic' }" @click="view = 'demographic'">Demographic Index</button>
     <button class="btn" :class="{ active: view === 'dashboard' }"   @click="view='dashboard'; $nextTick(()=>renderCharts())"
             style="background:#7c3aed;color:#fff;border-color:#7c3aed;">Dashboard</button>
-    <a href="/results/{{ run_id }}/export" class="btn btn-export">Export CSV</a>
+    <a x-show="dirty" href="/results/{{ run_id }}"
+       class="btn" style="background:#dc2626;color:#fff;border-color:#dc2626;">&#8635; Refresh Views</a>
+    <a href="/results/{{ run_id }}/export" class="btn btn-export" style="margin-left:auto;">Export CSV</a>
   </div>
 
-  {# ── SUMMARY VIEW ─────────────────────────────── #}
-  <div x-show="view === 'summary'">
-    {% for grade_summary in report.summary %}
-    <div class="grade-block">
-      <div class="grade-label">{{ grade_summary.grade_label }}</div>
-      <div class="solver-info">Solver: {{ grade_summary.solver_status }} in {{ grade_summary.solve_time }}s</div>
-      <table class="summary-table">
-        <thead>
-          <tr>
-            <th>Teacher</th><th>Students</th><th>IEP</th><th>Gifted</th>
-            <th>ELL</th><th>Speech</th><th>Female</th><th>Avg A-B%</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for c in grade_summary.classrooms %}
-          <tr>
-            <td>{{ c.teacher }}</td>
-            <td>{{ c.total }}</td>
-            <td>{{ c.iep }}</td>
-            <td>{{ c.gifted }}</td>
-            <td>{{ c.ell }}</td>
-            <td>{{ c.speech_only }}</td>
-            <td>{{ c.female }}</td>
-            <td>{{ c.avg_ab }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endfor %}
-  </div>
+  {# Persistent sidebar + content wrapper — spans all four modules #}
+  {% set all_grades = report.rows | map(attribute='grade') | unique | list | sort %}
+  <div class="page-layout">
 
-  {# ── DETAIL VIEW (by classroom) ───────────────── #}
-  {% set detail_grades = report.rows | map(attribute='grade') | unique | list | sort %}
-  <div x-show="view === 'detail'" class="dash-layout" x-data="{ detailGrade: {{ detail_grades[0] if detail_grades else 0 }} }">
-
-    <nav class="dash-sidebar">
-      <div class="dash-label">Grade</div>
-      {% for grade in detail_grades %}
-      <div class="dash-item" :class="{ active: detailGrade === {{ grade }} }"
-           @click="detailGrade = {{ grade }}">
+    {# Left sidebar — always visible regardless of active module #}
+    <nav class="sidebar">
+      <div class="sidebar-label">Grade</div>
+      {% for grade in all_grades %}
+      <div class="sidebar-item"
+           :class="{ active: selectedGrade === {{ grade }} }"
+           @click="selectedGrade = {{ grade }}; $nextTick(()=>renderCharts())">
         {{ 'Kinder' if grade == 0 else 'Grade ' ~ grade }}
       </div>
       {% endfor %}
+
+      {# Category nav — only shown when Dashboard tab is active #}
+      <template x-if="view === 'dashboard'">
+        <div>
+          <div class="sidebar-label" style="margin-top:14px;">Category</div>
+          <div class="sidebar-item" :class="{ active: dashCat==='overview' }"  @click="dashCat='overview'">Overview</div>
+          <div class="sidebar-item" :class="{ active: dashCat==='gender' }"    @click="dashCat='gender';   $nextTick(()=>renderCharts())">Gender</div>
+          <div class="sidebar-item" :class="{ active: dashCat==='race' }"      @click="dashCat='race';     $nextTick(()=>renderCharts())">Demographics</div>
+          <div class="sidebar-item" :class="{ active: dashCat==='academic' }"  @click="dashCat='academic'; $nextTick(()=>renderCharts())">Academic</div>
+          <div class="sidebar-item" :class="{ active: dashCat==='flags' }"     @click="dashCat='flags';    $nextTick(()=>renderCharts())">Service Flags</div>
+        </div>
+      </template>
     </nav>
 
-    <div class="dash-main">
-      {% for grade in detail_grades %}
-      {% set grade_rows = report.rows | selectattr('grade', 'eq', grade) | list %}
-      {% set classrooms = grade_rows | map(attribute='classroom') | unique | list | sort %}
-      <div x-show="detailGrade === {{ grade }}">
-        {% for c in classrooms %}
-        {% set c_rows = grade_rows | selectattr('classroom', 'eq', c) | list | sort(attribute='last_name') %}
-        {% set teacher = c_rows[0].teacher if c_rows else 'Class ' ~ c %}
-        <div style="margin-bottom: 24px;">
-          <strong>{{ teacher }}</strong>
-          <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">{{ c_rows | length }} students</span>
-          <table>
+    {# Main content area #}
+    <div class="main-content">
+
+      {# ── SUMMARY VIEW ─────────────────────────────── #}
+      <div x-show="view === 'summary'">
+        {% for grade_summary in report.summary %}
+        <div class="grade-block" x-show="selectedGrade === {{ grade_summary.grade }}">
+          <div class="grade-label">{{ grade_summary.grade_label }}</div>
+          <div class="solver-info">Solver: {{ grade_summary.solver_status }} in {{ grade_summary.solve_time }}s</div>
+          <table class="summary-table">
             <thead>
-              <tr><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
-              {% if not lock_edits %}<th>Move to</th>{% endif %}
+              <tr>
+                <th>Teacher</th><th>Students</th><th>IEP</th><th>Gifted</th>
+                <th>ELL</th><th>Speech</th><th>Female</th><th>Avg A-B%</th>
               </tr>
             </thead>
             <tbody>
-              {% for row in c_rows %}
+              {% for c in grade_summary.classrooms %}
               <tr>
-                <td>{{ row.last_name }}, {{ row.first_name }}</td>
-                <td>{{ row.gender }}</td>
-                <td>{{ row.race }}</td>
-                <td>
-                  {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
-                  {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
-                  {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
-                  {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
-                </td>
-                <td>{{ row.ab_average }}</td>
-                <td>{{ row.star_reading }}</td>
-                <td>{{ row.iready_math }}</td>
-                {% if not lock_edits %}
-                <td>
-                  <select class="edit-select"
-                    hx-post="/results/{{ run_id }}/reassign"
-                    hx-trigger="change"
-                    hx-swap="none"
-                    hx-vals='{"student_id": "{{ row.student_id }}"}'
-                    name="classroom">
-                    {% for opt in classrooms %}
-                    <option value="{{ opt }}" {% if opt == c %}selected{% endif %}>
-                      {{ grade_rows | selectattr('classroom', 'eq', opt) | map(attribute='teacher') | first | default('Class ' ~ opt) }}
-                    </option>
-                    {% endfor %}
-                  </select>
-                </td>
-                {% endif %}
+                <td>{{ c.teacher }}</td>
+                <td>{{ c.total }}</td>
+                <td>{{ c.iep }}</td>
+                <td>{{ c.gifted }}</td>
+                <td>{{ c.ell }}</td>
+                <td>{{ c.speech_only }}</td>
+                <td>{{ c.female }}</td>
+                <td>{{ c.avg_ab }}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -177,228 +142,282 @@
         </div>
         {% endfor %}
       </div>
-      {% endfor %}
-    </div>
-  </div>
 
-  {# ── DEMOGRAPHIC INDEX VIEW ───────────────────── #}
-  <div x-show="view === 'demographic'" x-data="{ filterFlag: 'all' }">
-    <div class="toolbar" style="margin-bottom: 16px;">
-      <span style="font-size:0.85rem;font-weight:600;">Filter by:</span>
-      <button class="btn" :class="{active: filterFlag==='all'}" @click="filterFlag='all'">All</button>
-      <button class="btn" :class="{active: filterFlag==='iep'}" @click="filterFlag='iep'">IEP</button>
-      <button class="btn" :class="{active: filterFlag==='gifted'}" @click="filterFlag='gifted'">Gifted</button>
-      <button class="btn" :class="{active: filterFlag==='ell'}" @click="filterFlag='ell'">ELL</button>
-      <button class="btn" :class="{active: filterFlag==='speech_only'}" @click="filterFlag='speech_only'">Speech</button>
-    </div>
-    <table>
-      <thead>
-        <tr><th>Grade</th><th>Classroom</th><th>Teacher</th><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th></tr>
-      </thead>
-      <tbody>
-        {% for row in report.rows | sort(attribute='grade,classroom,last_name') %}
-        <tr
-          x-show="filterFlag === 'all'
-            || (filterFlag === 'iep' && {{ 'true' if row.iep else 'false' }})
-            || (filterFlag === 'gifted' && {{ 'true' if row.gifted else 'false' }})
-            || (filterFlag === 'ell' && {{ 'true' if row.ell else 'false' }})
-            || (filterFlag === 'speech_only' && {{ 'true' if row.speech_only else 'false' }})
-          ">
-          <td>{{ 'K' if row.grade == 0 else row.grade }}</td>
-          <td>{{ row.classroom }}</td>
-          <td>{{ row.teacher }}</td>
-          <td>{{ row.last_name }}, {{ row.first_name }}</td>
-          <td>{{ row.gender }}</td>
-          <td>{{ row.race }}</td>
-          <td>
-            {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
-            {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
-            {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
-            {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  {# ── DASHBOARD VIEW ───────────────────────────── #}
-  <div x-show="view === 'dashboard'" class="dash-layout">
-    <nav class="dash-sidebar">
-      <div class="dash-label">Grade</div>
-      <template x-for="(g, i) in dashMetrics" :key="g.grade">
-        <div class="dash-item" :class="{ active: dashGrade === i }" @click="dashGrade=i; $nextTick(()=>renderCharts())" x-text="g.grade_label"></div>
-      </template>
-      <div class="dash-label" style="margin-top:14px;">Category</div>
-      <div class="dash-item" :class="{ active: dashCat==='overview' }"  @click="dashCat='overview'">Overview</div>
-      <div class="dash-item" :class="{ active: dashCat==='gender' }"    @click="dashCat='gender';   $nextTick(()=>renderCharts())">Gender</div>
-      <div class="dash-item" :class="{ active: dashCat==='race' }"      @click="dashCat='race';     $nextTick(()=>renderCharts())">Demographics</div>
-      <div class="dash-item" :class="{ active: dashCat==='academic' }"  @click="dashCat='academic'; $nextTick(()=>renderCharts())">Academic</div>
-      <div class="dash-item" :class="{ active: dashCat==='flags' }"     @click="dashCat='flags';    $nextTick(()=>renderCharts())">Service Flags</div>
-    </nav>
-
-    <div class="dash-main">
-      <template x-if="currentGrade()">
-        <div>
-          <div style="font-size:1.1rem;font-weight:700;margin-bottom:2px" x-text="currentGrade().grade_label"></div>
-          <div style="font-size:0.8rem;color:#64748b;margin-bottom:16px" x-text="currentGrade().classrooms.length + ' classrooms · ' + dashTotal() + ' students'"></div>
-
-          <div class="kpi-row">
-            <div class="kpi"><div class="kpi-val" x-text="dashTotal()"></div><div class="kpi-lbl">Students</div></div>
-            <div class="kpi"><div class="kpi-val" x-text="dashFlag('IEP')"></div><div class="kpi-lbl">IEP</div></div>
-            <div class="kpi"><div class="kpi-val" x-text="dashFlag('Gifted')"></div><div class="kpi-lbl">Gifted</div></div>
-            <div class="kpi"><div class="kpi-val" x-text="dashFlag('ELL')"></div><div class="kpi-lbl">ELL</div></div>
-            <div class="kpi"><div class="kpi-val" x-text="dashFlag('Speech Only')"></div><div class="kpi-lbl">Speech</div></div>
-          </div>
-
-          {# Overview #}
-          <template x-if="dashCat === 'overview'">
-            <div class="tbl-wrap">
-              <h4>All Classrooms — Full Breakdown</h4>
+      {# ── BY CLASSROOM VIEW ────────────────────────── #}
+      {% set detail_grades = report.rows | map(attribute='grade') | unique | list | sort %}
+      <div x-show="view === 'detail'">
+        {% for grade in detail_grades %}
+        {% set grade_rows = report.rows | selectattr('grade', 'eq', grade) | list %}
+        {% set classrooms = grade_rows | map(attribute='classroom') | unique | list | sort %}
+        <div x-show="selectedGrade === {{ grade }}">
+          {% for c in classrooms %}
+            {% set c_rows = grade_rows | selectattr('classroom', 'eq', c) | list | sort(attribute='last_name') %}
+            {% set teacher = c_rows[0].teacher if c_rows else 'Class ' ~ c %}
+            <div style="margin-bottom: 24px;">
+              <strong>{{ teacher }}</strong>
+              <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">{{ c_rows | length }} students</span>
               <table>
-                <thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th><th>Female</th><th>Male</th>
-                  <template x-if="!currentGrade().is_kinder"><th>A-B%</th><th>F%</th><th>STAR</th><th>iReady</th></template>
-                  <template x-if="currentGrade().is_kinder"><th>High</th><th>Med</th><th>Low</th></template>
-                </tr></thead>
+                <thead>
+                  <tr><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th><th>A-B%</th><th>STAR Rdg</th><th>iReady Math</th>
+                  {% if not lock_edits %}<th>Move to</th>{% endif %}
+                  </tr>
+                </thead>
                 <tbody>
-                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
-                    <tr>
-                      <td x-text="c.teacher"></td><td x-text="c.total"></td>
-                      <td><span class="pill p-blue" x-text="c.flags['IEP']"></span></td>
-                      <td><span class="pill p-yellow" x-text="c.flags['Gifted']"></span></td>
-                      <td><span class="pill p-green" x-text="c.flags['ELL']"></span></td>
-                      <td><span class="pill p-purple" x-text="c.flags['Speech Only']"></span></td>
-                      <td x-text="c.gender['Female']"></td><td x-text="c.gender['Male']"></td>
-                      <template x-if="!currentGrade().is_kinder">
-                        <td><span class="pill p-green" x-text="c.academic['A-B%']+'%'"></span></td>
-                        <td><span class="pill p-red"   x-text="c.academic['F%']+'%'"></span></td>
-                        <td x-text="c.academic['STAR Rdg']"></td>
-                        <td x-text="c.academic['iReady Math']"></td>
-                      </template>
-                      <template x-if="currentGrade().is_kinder">
-                        <td x-text="c.academic['High']"></td>
-                        <td x-text="c.academic['Medium']"></td>
-                        <td x-text="c.academic['Low']"></td>
-                      </template>
-                    </tr>
-                  </template>
+                  {% for row in c_rows %}
+                  <tr>
+                    <td>{{ row.last_name }}, {{ row.first_name }}</td>
+                    <td>{{ row.gender }}</td>
+                    <td>{{ row.race }}</td>
+                    <td>
+                      {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
+                      {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
+                      {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
+                      {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
+                    </td>
+                    <td>{{ row.ab_average }}</td>
+                    <td>{{ row.star_reading }}</td>
+                    <td>{{ row.iready_math }}</td>
+                    {% if not lock_edits %}
+                    <td>
+                      <select class="edit-select"
+                        hx-post="/results/{{ run_id }}/reassign"
+                        hx-trigger="change"
+                        hx-swap="none"
+                        hx-vals='{"student_id": "{{ row.student_id }}"}'
+                        hx-on::after-request="document.dispatchEvent(new CustomEvent('roster-changed'))"
+                        name="classroom">
+                        {% for opt in classrooms %}
+                        <option value="{{ opt }}" {% if opt == c %}selected{% endif %}>
+                          {{ grade_rows | selectattr('classroom', 'eq', opt) | map(attribute='teacher') | first | default('Class ' ~ opt) }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    {% endif %}
+                  </tr>
+                  {% endfor %}
                 </tbody>
               </table>
             </div>
-          </template>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
 
-          {# Gender #}
-          <template x-if="dashCat === 'gender'">
-            <div>
-              <div class="tbl-wrap"><h4>Gender Balance</h4>
-                <table><thead><tr><th>Teacher</th><th>Total</th><th>Female</th><th>Male</th><th>% Female</th></tr></thead>
+      {# ── DEMOGRAPHIC INDEX VIEW ───────────────────── #}
+      <div x-show="view === 'demographic'" x-data="{ filterFlag: 'all' }">
+        <div class="toolbar" style="margin-bottom: 16px;">
+          <span style="font-size:0.85rem;font-weight:600;">Filter by:</span>
+          <button class="btn" :class="{active: filterFlag==='all'}"        @click="filterFlag='all'">All</button>
+          <button class="btn" :class="{active: filterFlag==='iep'}"        @click="filterFlag='iep'">IEP</button>
+          <button class="btn" :class="{active: filterFlag==='gifted'}"     @click="filterFlag='gifted'">Gifted</button>
+          <button class="btn" :class="{active: filterFlag==='ell'}"        @click="filterFlag='ell'">ELL</button>
+          <button class="btn" :class="{active: filterFlag==='speech_only'}" @click="filterFlag='speech_only'">Speech</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Grade</th><th>Classroom</th><th>Teacher</th><th>Name</th><th>Gender</th><th>Race</th><th>Flags</th></tr>
+          </thead>
+          <tbody>
+            {% for row in report.rows | sort(attribute='grade,classroom,last_name') %}
+            <tr x-show="selectedGrade === {{ row.grade }} && (filterFlag === 'all'
+                || (filterFlag === 'iep'        && {{ 'true' if row.iep else 'false' }})
+                || (filterFlag === 'gifted'     && {{ 'true' if row.gifted else 'false' }})
+                || (filterFlag === 'ell'        && {{ 'true' if row.ell else 'false' }})
+                || (filterFlag === 'speech_only'&& {{ 'true' if row.speech_only else 'false' }})
+              )">
+              <td>{{ 'K' if row.grade == 0 else row.grade }}</td>
+              <td>{{ row.classroom }}</td>
+              <td>{{ row.teacher }}</td>
+              <td>{{ row.last_name }}, {{ row.first_name }}</td>
+              <td>{{ row.gender }}</td>
+              <td>{{ row.race }}</td>
+              <td>
+                {% if row.iep %}<span class="badge badge-iep">IEP</span> {% endif %}
+                {% if row.gifted %}<span class="badge badge-gifted">Gifted</span> {% endif %}
+                {% if row.ell %}<span class="badge badge-ell">ELL</span> {% endif %}
+                {% if row.speech_only %}<span class="badge badge-speech">Speech</span> {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {# ── DASHBOARD VIEW ───────────────────────────── #}
+      <div x-show="view === 'dashboard'">
+        <template x-if="currentGrade()">
+          <div>
+            <div style="font-size:1.1rem;font-weight:700;margin-bottom:2px" x-text="currentGrade().grade_label"></div>
+            <div style="font-size:0.8rem;color:#64748b;margin-bottom:16px"
+                 x-text="currentGrade().classrooms.length + ' classrooms · ' + dashTotal() + ' students'"></div>
+
+            <div class="kpi-row">
+              <div class="kpi"><div class="kpi-val" x-text="dashTotal()"></div><div class="kpi-lbl">Students</div></div>
+              <div class="kpi"><div class="kpi-val" x-text="dashFlag('IEP')"></div><div class="kpi-lbl">IEP</div></div>
+              <div class="kpi"><div class="kpi-val" x-text="dashFlag('Gifted')"></div><div class="kpi-lbl">Gifted</div></div>
+              <div class="kpi"><div class="kpi-val" x-text="dashFlag('ELL')"></div><div class="kpi-lbl">ELL</div></div>
+              <div class="kpi"><div class="kpi-val" x-text="dashFlag('Speech Only')"></div><div class="kpi-lbl">Speech</div></div>
+            </div>
+
+            {# Overview #}
+            <template x-if="dashCat === 'overview'">
+              <div class="tbl-wrap">
+                <h4>All Classrooms — Full Breakdown</h4>
+                <table>
+                  <thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th><th>Female</th><th>Male</th>
+                    <template x-if="!currentGrade().is_kinder"><th>A-B%</th><th>F%</th><th>STAR</th><th>iReady</th></template>
+                    <template x-if="currentGrade().is_kinder"><th>High</th><th>Med</th><th>Low</th></template>
+                  </tr></thead>
                   <tbody>
                     <template x-for="c in currentGrade().classrooms" :key="c.teacher">
-                      <tr><td x-text="c.teacher"></td><td x-text="c.total"></td>
+                      <tr>
+                        <td x-text="c.teacher"></td><td x-text="c.total"></td>
+                        <td><span class="pill p-blue"   x-text="c.flags['IEP']"></span></td>
+                        <td><span class="pill p-yellow" x-text="c.flags['Gifted']"></span></td>
+                        <td><span class="pill p-green"  x-text="c.flags['ELL']"></span></td>
+                        <td><span class="pill p-purple" x-text="c.flags['Speech Only']"></span></td>
                         <td x-text="c.gender['Female']"></td><td x-text="c.gender['Male']"></td>
-                        <td x-text="c.total ? Math.round((c.gender['Female']||0)/c.total*100)+'%' : '—'"></td>
+                        <template x-if="!currentGrade().is_kinder">
+                          <td><span class="pill p-green" x-text="c.academic['A-B%']+'%'"></span></td>
+                          <td><span class="pill p-red"   x-text="c.academic['F%']+'%'"></span></td>
+                          <td x-text="c.academic['STAR Rdg']"></td>
+                          <td x-text="c.academic['iReady Math']"></td>
+                        </template>
+                        <template x-if="currentGrade().is_kinder">
+                          <td x-text="c.academic['High']"></td>
+                          <td x-text="c.academic['Medium']"></td>
+                          <td x-text="c.academic['Low']"></td>
+                        </template>
                       </tr>
                     </template>
                   </tbody>
                 </table>
               </div>
-              <div class="chart-grid">
-                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
-                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
-                    <div class="chart-wrap"><canvas :id="`ch-gender-${dashGrade}-${i}`"></canvas></div></div>
-                </template>
-              </div>
-            </div>
-          </template>
+            </template>
 
-          {# Demographics #}
-          <template x-if="dashCat === 'race'">
-            <div>
-              <div class="tbl-wrap"><h4>Demographics by Classroom</h4>
-                <table><thead><tr><th>Teacher</th>
-                  <template x-for="r in allRaces()" :key="r"><th x-text="r"></th></template>
-                </tr></thead>
-                <tbody>
-                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
-                    <tr><td x-text="c.teacher"></td>
-                      <template x-for="r in allRaces()" :key="r"><td x-text="c.race[r]||0"></td></template>
-                    </tr>
-                  </template>
-                </tbody></table>
-              </div>
-              <div class="chart-grid">
-                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
-                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
-                    <div class="chart-wrap"><canvas :id="`ch-race-${dashGrade}-${i}`"></canvas></div></div>
-                </template>
-              </div>
-            </div>
-          </template>
-
-          {# Academic #}
-          <template x-if="dashCat === 'academic'">
-            <div>
-              <div class="tbl-wrap">
-                <h4 x-text="currentGrade().is_kinder ? 'Readiness Tiers' : 'Academic Performance'"></h4>
-                <table><thead><tr><th>Teacher</th>
-                  <template x-if="currentGrade().is_kinder"><th>High</th><th>Medium</th><th>Low</th></template>
-                  <template x-if="!currentGrade().is_kinder"><th>Avg A-B%</th><th>Avg C-D%</th><th>Avg F%</th><th>STAR Rdg</th><th>iReady</th></template>
-                </tr></thead>
-                <tbody>
-                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
-                    <tr><td x-text="c.teacher"></td>
-                      <template x-if="currentGrade().is_kinder">
-                        <td x-text="c.academic['High']"></td><td x-text="c.academic['Medium']"></td><td x-text="c.academic['Low']"></td>
+            {# Gender #}
+            <template x-if="dashCat === 'gender'">
+              <div>
+                <div class="tbl-wrap"><h4>Gender Balance</h4>
+                  <table><thead><tr><th>Teacher</th><th>Total</th><th>Female</th><th>Male</th><th>% Female</th></tr></thead>
+                    <tbody>
+                      <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                        <tr><td x-text="c.teacher"></td><td x-text="c.total"></td>
+                          <td x-text="c.gender['Female']"></td><td x-text="c.gender['Male']"></td>
+                          <td x-text="c.total ? Math.round((c.gender['Female']||0)/c.total*100)+'%' : '—'"></td>
+                        </tr>
                       </template>
-                      <template x-if="!currentGrade().is_kinder">
-                        <td><span class="pill p-green" x-text="c.academic['A-B%']+'%'"></span></td>
-                        <td x-text="c.academic['C-D%']+'%'"></td>
-                        <td><span class="pill p-red" x-text="c.academic['F%']+'%'"></span></td>
-                        <td x-text="c.academic['STAR Rdg']"></td><td x-text="c.academic['iReady Math']"></td>
-                      </template>
-                    </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="chart-grid">
+                  <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                    <div class="chart-card">
+                      <h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                      <div class="chart-wrap"><canvas :id="`ch-gender-${selectedGrade}-${i}`"></canvas></div>
+                    </div>
                   </template>
-                </tbody></table>
+                </div>
               </div>
-              <div class="chart-grid">
-                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
-                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
-                    <div class="chart-wrap"><canvas :id="`ch-academic-${dashGrade}-${i}`"></canvas></div></div>
-                </template>
-              </div>
-            </div>
-          </template>
+            </template>
 
-          {# Service Flags #}
-          <template x-if="dashCat === 'flags'">
-            <div>
-              <div class="tbl-wrap"><h4>Service Flags by Classroom</h4>
-                <table><thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th><th>No Flag</th></tr></thead>
-                <tbody>
-                  <template x-for="c in currentGrade().classrooms" :key="c.teacher">
-                    <tr><td x-text="c.teacher"></td><td x-text="c.total"></td>
-                      <td><span class="pill p-blue" x-text="c.flags['IEP']"></span></td>
-                      <td><span class="pill p-yellow" x-text="c.flags['Gifted']"></span></td>
-                      <td><span class="pill p-green" x-text="c.flags['ELL']"></span></td>
-                      <td><span class="pill p-purple" x-text="c.flags['Speech Only']"></span></td>
-                      <td x-text="c.flags['No Flag']||0"></td>
-                    </tr>
+            {# Demographics #}
+            <template x-if="dashCat === 'race'">
+              <div>
+                <div class="tbl-wrap"><h4>Demographics by Classroom</h4>
+                  <table><thead><tr><th>Teacher</th>
+                    <template x-for="r in allRaces()" :key="r"><th x-text="r"></th></template>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                      <tr><td x-text="c.teacher"></td>
+                        <template x-for="r in allRaces()" :key="r"><td x-text="c.race[r]||0"></td></template>
+                      </tr>
+                    </template>
+                  </tbody></table>
+                </div>
+                <div class="chart-grid">
+                  <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                    <div class="chart-card">
+                      <h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                      <div class="chart-wrap"><canvas :id="`ch-race-${selectedGrade}-${i}`"></canvas></div>
+                    </div>
                   </template>
-                </tbody></table>
+                </div>
               </div>
-              <div class="chart-grid">
-                <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
-                  <div class="chart-card"><h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
-                    <div class="chart-wrap"><canvas :id="`ch-flags-${dashGrade}-${i}`"></canvas></div></div>
-                </template>
-              </div>
-            </div>
-          </template>
+            </template>
 
-        </div>
-      </template>
-    </div>
-  </div>
+            {# Academic #}
+            <template x-if="dashCat === 'academic'">
+              <div>
+                <div class="tbl-wrap">
+                  <h4 x-text="currentGrade().is_kinder ? 'Readiness Tiers' : 'Academic Performance'"></h4>
+                  <table><thead><tr><th>Teacher</th>
+                    <template x-if="currentGrade().is_kinder"><th>High</th><th>Medium</th><th>Low</th></template>
+                    <template x-if="!currentGrade().is_kinder"><th>Avg A-B%</th><th>Avg C-D%</th><th>Avg F%</th><th>STAR Rdg</th><th>iReady</th></template>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                      <tr><td x-text="c.teacher"></td>
+                        <template x-if="currentGrade().is_kinder">
+                          <td x-text="c.academic['High']"></td><td x-text="c.academic['Medium']"></td><td x-text="c.academic['Low']"></td>
+                        </template>
+                        <template x-if="!currentGrade().is_kinder">
+                          <td><span class="pill p-green" x-text="c.academic['A-B%']+'%'"></span></td>
+                          <td x-text="c.academic['C-D%']+'%'"></td>
+                          <td><span class="pill p-red" x-text="c.academic['F%']+'%'"></span></td>
+                          <td x-text="c.academic['STAR Rdg']"></td><td x-text="c.academic['iReady Math']"></td>
+                        </template>
+                      </tr>
+                    </template>
+                  </tbody></table>
+                </div>
+                <div class="chart-grid">
+                  <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                    <div class="chart-card">
+                      <h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                      <div class="chart-wrap"><canvas :id="`ch-academic-${selectedGrade}-${i}`"></canvas></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            {# Service Flags #}
+            <template x-if="dashCat === 'flags'">
+              <div>
+                <div class="tbl-wrap"><h4>Service Flags by Classroom</h4>
+                  <table><thead><tr><th>Teacher</th><th>Total</th><th>IEP</th><th>Gifted</th><th>ELL</th><th>Speech</th><th>No Flag</th></tr></thead>
+                  <tbody>
+                    <template x-for="c in currentGrade().classrooms" :key="c.teacher">
+                      <tr><td x-text="c.teacher"></td><td x-text="c.total"></td>
+                        <td><span class="pill p-blue"   x-text="c.flags['IEP']"></span></td>
+                        <td><span class="pill p-yellow" x-text="c.flags['Gifted']"></span></td>
+                        <td><span class="pill p-green"  x-text="c.flags['ELL']"></span></td>
+                        <td><span class="pill p-purple" x-text="c.flags['Speech Only']"></span></td>
+                        <td x-text="c.flags['No Flag']||0"></td>
+                      </tr>
+                    </template>
+                  </tbody></table>
+                </div>
+                <div class="chart-grid">
+                  <template x-for="(c,i) in currentGrade().classrooms" :key="c.teacher">
+                    <div class="chart-card">
+                      <h4 x-text="c.teacher"></h4><div class="sub" x-text="c.total+' students'"></div>
+                      <div class="chart-wrap"><canvas :id="`ch-flags-${selectedGrade}-${i}`"></canvas></div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+          </div>
+        </template>
+      </div>
+
+    </div>{# end .main-content #}
+  </div>{# end .page-layout #}
 
 <script>
 const METRICS = {{ metrics_json | safe }};
@@ -427,11 +446,14 @@ function appState() {
   return {
     view: '{{ view|default("summary") }}',
     dashMetrics: METRICS,
-    dashGrade: 0,
+    selectedGrade: METRICS[0]?.grade ?? 0,
     dashCat: 'overview',
+    dirty: false,
 
     initDash() {},
-    currentGrade() { return this.dashMetrics[this.dashGrade] || null; },
+    currentGrade() {
+      return this.dashMetrics.find(g => g.grade === this.selectedGrade) || null;
+    },
     dashTotal() { return this.currentGrade()?.classrooms.reduce((s,c) => s+c.total, 0) || 0; },
     dashFlag(f) { return this.currentGrade()?.classrooms.reduce((s,c) => s+(c.flags[f]||0), 0) || 0; },
     allRaces() {
@@ -442,7 +464,7 @@ function appState() {
     renderCharts() {
       const g = this.currentGrade();
       if (!g || this.dashCat === 'overview') return;
-      const gi = this.dashGrade;
+      const gi = this.selectedGrade;
       const cat = this.dashCat;
       g.classrooms.forEach((c, i) => {
         if (cat === 'gender') {
