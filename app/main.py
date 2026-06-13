@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 from .ingest import build_grade_packets, parse_teacher_roster
 from .models import ObjectiveWeights
 from .optimizer import optimize_grade
-from .reporter import build_report, reassign_student, export_csv
+from .reporter import build_report, reassign_student, rebuild_aggregates, export_csv
 
 def _safe_json(data) -> str:
     """Serialize to JSON safe for embedding in an HTML <script> tag."""
@@ -95,8 +95,10 @@ async def handle_upload(
     all_students = [s for p in packets for s in p.students]
     report = build_report(all_students, results, teacher_names)
 
+    solve_info = {r.grade: (r.solver_status, r.solve_time_seconds) for r in results}
+
     run_id = str(uuid.uuid4())
-    _runs[run_id] = {"report": report, "teacher_names": teacher_names}
+    _runs[run_id] = {"report": report, "teacher_names": teacher_names, "solve_info": solve_info}
 
     metrics_json = _safe_json(report["metrics"])
 
@@ -150,5 +152,6 @@ async def manual_reassign(request: Request, run_id: str):
     if not student_id or not new_classroom:
         raise HTTPException(400, "student_id and classroom required")
 
-    run["report"] = reassign_student(run["report"], student_id, new_classroom)
+    run["report"] = reassign_student(run["report"], student_id, new_classroom, run["teacher_names"])
+    run["report"] = rebuild_aggregates(run["report"], run["teacher_names"], run["solve_info"])
     return {"status": "ok"}

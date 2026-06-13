@@ -161,12 +161,110 @@ def reassign_student(
     report: dict,
     student_id: str,
     new_classroom: int,  # 1-based
+    teacher_names: dict[int, list[str]],
 ) -> dict:
-    """Apply a manual override — update the student's classroom in place."""
+    """Apply a manual override — update classroom and teacher name in place."""
     for row in report["rows"]:
         if row["student_id"] == student_id:
             row["classroom"] = new_classroom
+            grade_teachers = teacher_names.get(row["grade"], [])
+            idx = new_classroom - 1
+            row["teacher"] = grade_teachers[idx] if idx < len(grade_teachers) else f"Class {new_classroom}"
             break
+    return report
+
+
+def rebuild_aggregates(
+    report: dict,
+    teacher_names: dict[int, list[str]],
+    solve_info: dict[int, tuple[str, float]],  # grade -> (solver_status, solve_time_seconds)
+) -> dict:
+    """Recompute summary and metrics from report['rows'] after a manual reassignment."""
+    rows = report["rows"]
+    grades = sorted({r["grade"] for r in rows})
+
+    new_summary = []
+    new_metrics = []
+
+    for grade in grades:
+        is_kinder = grade == 0
+        grade_rows = [r for r in rows if r["grade"] == grade]
+        grade_teachers = teacher_names.get(grade, [])
+        n_classrooms = max((r["classroom"] for r in grade_rows), default=0)
+        status, solve_time = solve_info.get(grade, ("FEASIBLE", 0.0))
+
+        classroom_summary = []
+        classroom_metrics = []
+
+        for c_num in range(1, n_classrooms + 1):
+            c_rows = [r for r in grade_rows if r["classroom"] == c_num]
+            teacher = grade_teachers[c_num - 1] if c_num - 1 < len(grade_teachers) else f"Class {c_num}"
+            n = len(c_rows)
+
+            classroom_summary.append({
+                "teacher": teacher,
+                "total": n,
+                "iep": sum(1 for r in c_rows if r["iep"]),
+                "gifted": sum(1 for r in c_rows if r["gifted"]),
+                "ell": sum(1 for r in c_rows if r["ell"]),
+                "speech_only": sum(1 for r in c_rows if r["speech_only"]),
+                "female": sum(1 for r in c_rows if r["gender"].upper() in ("F", "FEMALE")),
+                "avg_ab": round(sum(r["ab_average"] for r in c_rows) / n, 1) if n else 0,
+            })
+
+            gender = {
+                "Male": sum(1 for r in c_rows if r["gender"].upper() in ("M", "MALE")),
+                "Female": sum(1 for r in c_rows if r["gender"].upper() in ("F", "FEMALE")),
+                "Other": sum(1 for r in c_rows if r["gender"].upper() not in ("M", "MALE", "F", "FEMALE")),
+            }
+            race_counts: dict[str, int] = {}
+            for r in c_rows:
+                race_counts[r["race"]] = race_counts.get(r["race"], 0) + 1
+            flags = {
+                "IEP": sum(1 for r in c_rows if r["iep"]),
+                "Gifted": sum(1 for r in c_rows if r["gifted"]),
+                "ELL": sum(1 for r in c_rows if r["ell"]),
+                "Speech Only": sum(1 for r in c_rows if r["speech_only"]),
+                "No Flag": sum(1 for r in c_rows if not any([r["iep"], r["gifted"], r["ell"], r["speech_only"]])),
+            }
+            if is_kinder:
+                academic = {
+                    "High": sum(1 for r in c_rows if r["kinder_high"]),
+                    "Medium": sum(1 for r in c_rows if r["kinder_medium"]),
+                    "Low": sum(1 for r in c_rows if r["kinder_low"]),
+                }
+            else:
+                avg_ab   = round(sum(r["ab_average"] for r in c_rows) / n, 1) if n else 0
+                avg_cd   = round(sum(r["cd_average"] for r in c_rows) / n, 1) if n else 0
+                avg_f    = round(sum(r["f_average"]   for r in c_rows) / n, 1) if n else 0
+                avg_star = round(sum(r["star_reading"] for r in c_rows) / n, 2) if n else 0
+                avg_math = round(sum(r["iready_math"]  for r in c_rows) / n, 2) if n else 0
+                academic = {"A-B%": avg_ab, "C-D%": avg_cd, "F%": avg_f,
+                            "STAR Rdg": avg_star, "iReady Math": avg_math}
+
+            classroom_metrics.append({
+                "teacher": teacher, "total": n,
+                "gender": gender, "race": race_counts,
+                "flags": flags, "academic": academic,
+                "is_kinder": is_kinder,
+            })
+
+        new_summary.append({
+            "grade": grade,
+            "grade_label": "Kinder" if grade == 0 else f"Grade {grade}",
+            "solver_status": status,
+            "solve_time": solve_time,
+            "classrooms": classroom_summary,
+        })
+        new_metrics.append({
+            "grade": grade,
+            "grade_label": "Kinder" if grade == 0 else f"Grade {grade}",
+            "is_kinder": is_kinder,
+            "classrooms": classroom_metrics,
+        })
+
+    report["summary"] = new_summary
+    report["metrics"] = new_metrics
     return report
 
 
